@@ -1863,7 +1863,7 @@ ContentPage {
                         Layout.fillWidth: false
                         buttonIcon: cwDelegate.modelData.icon || "widgets"
                         text: cwDelegate.modelData.name
-                        readonly property bool currentEnabled: Config.getNestedValue("background.widgets.custom." + cwDelegate.modelData.id + ".enable", true)
+                        readonly property bool currentEnabled: Config.getNestedValue("background.widgets.custom." + cwDelegate.modelData.id + ".enable", false)
                         autoToggle: false
 
                         checked: currentEnabled

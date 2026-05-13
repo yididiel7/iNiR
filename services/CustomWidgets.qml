@@ -123,7 +123,7 @@ Singleton {
 
     function _widgetDefaults(widget: var, index: int): var {
         let defaults = {
-            enable: true,
+            enable: false,
             placementStrategy: "free",
             x: 240 + index * 36,
             y: 240 + index * 28,

@@ -1276,7 +1276,7 @@ Scope {
                                 RippleButton {
                                     id: customWidgetButton
                                     required property var modelData
-                                    readonly property bool widgetEnabled: Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", true)
+                                    readonly property bool widgetEnabled: Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", false)
                                     width: 36; height: 36
                                     buttonRadius: Appearance.rounding.full
                                     toggled: widgetEnabled
@@ -1448,13 +1448,10 @@ Scope {
                         required property var modelData
                         required property int index
 
-                        readonly property bool widgetShown: Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", true)
-                        active: widgetShown
-                        opacity: widgetShown ? 1 : 0
-                        visible: opacity > 0
-                        Behavior on opacity {
-                            enabled: Appearance.animationsEnabled
-                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        active: false
+
+                        function _configEnabled(): bool {
+                            return Boolean(Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", false));
                         }
 
                         // setSource passes required properties at construction time
@@ -1474,10 +1471,32 @@ Scope {
                             const axes = (modelData.resizableAxes && Object.keys(modelData.resizableAxes).length > 0)
                                 ? modelData.resizableAxes : { uniform: "widgetScale" };
                             props.resizableAxes = axes;
+                            active = true;
                             setSource(modelData.qmlPath, props);
                         }
-                        onActiveChanged: if (active) _load()
-                        Component.onCompleted: if (active) _load()
+
+                        function _unload(): void {
+                            active = false;
+                            source = "";
+                        }
+
+                        function _syncLoaded(): void {
+                            if (_configEnabled()) {
+                                if (!item)
+                                    _load();
+                            } else if (item || active) {
+                                _unload();
+                            }
+                        }
+
+                        Component.onCompleted: Qt.callLater(_syncLoaded)
+
+                        Connections {
+                            target: Config
+                            function onConfigChanged() {
+                                Qt.callLater(customWidgetLoader._syncLoaded);
+                            }
+                        }
 
                         Connections {
                             target: bgRoot.screen

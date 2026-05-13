@@ -130,7 +130,7 @@ Item {
             Item {
                 id: customDelegate
                 required property var modelData
-                readonly property bool widgetEnabled: Boolean(Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", true))
+                readonly property bool widgetEnabled: Boolean(Config.getNestedValue("background.widgets.custom." + modelData.id + ".enable", false))
                 width: _wmCol.width; height: 36
                 Row {
                     anchors.verticalCenter: parent.verticalCenter
