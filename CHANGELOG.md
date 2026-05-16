@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Clipboard navigate mode**: keyboard navigation in the clipboard panel. HTML display cleanup, copy operation preserves cursor position. Also added HTML and Unicode sanitization helpers so pasted content doesn't inject garbage.
 - **Sidebar requested-widget navigation**: any component can now request a specific sidebar tab by type (e.g. `"notepad"`) through `GlobalStates.sidebarRightRequestedWidget` without reaching into Persistent state. Both sidebar layouts listen and switch accordingly. Bar notepad button uses this instead of hardcoded tab indices.
 - **Notepad context menu**: right-click context menu in the notepad widget, themed selection colors, and persistent selection so you don't lose your highlight when the sidebar loses focus.
+- **Cava configuration**: Settings UI for cava process parameters (sensitivity, bars, framerate, stereo) with live apply. Both ii and waffle settings families.
+- **Settings UI for file paths**: screenshot/recording filename formats, wallpapers directory, and booru download paths now editable from Settings.
 
 ### Changed
 - **Steam theming moved to Millennium**: Adwaita for Steam is deprecated; theming now goes through Millennium's Material-Theme plugin. Updated translations across all locales.
@@ -27,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wallpaper selector performance**: eliminated per-item `magick identify` spawn (thundering herd — N concurrent magick processes on directory open). Lowered thumbnail size from 512px to 256px (4x less memory). Increased batch workers from 1 to 4. Removed per-item OpacityMask FBO.
 - **applycolor module runner**: replaced unbounded fork-all with a sliding window (nproc/2, capped at 4) using `ionice -c 3` + `nice -n 10`. New manifest-based enablement skips disabled targets entirely instead of spawning them to self-exit.
 - **Dock shadow opacity**: per dark/light mode tuning (0.18/0.35) with spread reset for cleaner appearance.
+- **Quick Settings wallpaper section**: Transparency and Colors-only toggles now side-by-side, reducing vertical footprint so the wallpaper thumbnails are more prominent.
+- **Debug logging gated behind QS_DEBUG**: ~72 informational `console.log` calls across 29 files converted to a `_log()` helper that only prints when `QS_DEBUG=1`. Error and failure logs remain unconditional.
 
 ### Fixed
 - **Dock stale toplevel ghost entries**: NiriService window matching could produce false matches on zero-score entries, and `sortedToplevels` could contain stale compositor entries not present in live ToplevelManager. Both now guarded.
@@ -43,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Screenshot clipboard pollution**: previews no longer pollute the clipboard with intermediate screenshot data.
 - **Opus audio codec options**: clarified labels in Settings UI.
 - **Translation generation hitting ARG_MAX** *(#140)*: `gemini-translate.sh` passed the full `en_US.json` (~228 KB) as a shell argument, exceeding the kernel's 128 KB per-argument limit. Refactored to use jq `--rawfile` and pipe payload to curl via stdin.
+- **Weather location leaked in logs**: city name and coordinates were logged in plaintext when `hideLocation` was off. Now always redacted regardless of the UI toggle — logs are persistent and can be shared accidentally.
+- **Cava settings UI showing non-functional options**: removed colorSource, gradientCount, barWidth, barSpacing, foreground, and background controls from both ii and waffle settings. These had no consumers — CavaProcess only passes sensitivity/bars/framerate/stereo to the cava process; visual parameters are per-widget by design.
 
 ### Issues / PRs
 - Fixed [#140](https://github.com/snowarch/iNiR/issues/140), [#144](https://github.com/snowarch/iNiR/issues/144).
