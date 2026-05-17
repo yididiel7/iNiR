@@ -127,8 +127,8 @@ ContentPage {
                         providerForm.saveLabelText = Translation.tr("Add")
                         providerNameInput.text = ""
                         providerEndpointInput.text = ""
-                        apiFormatRow.selectedFormat = "openai"
-                        apiFormatRow._manualOverride = false
+                        providerForm.selectedFormat = "openai"
+                        providerForm._manualOverride = false
                         providerModelInput.text = ""
                         providerApiKeyInput.text = ""
                         providerForm.expanded = true
@@ -176,6 +176,19 @@ ContentPage {
                             anchors.margins: 8
                             spacing: 10
 
+                            MaterialSymbol {
+                                readonly property var formatIcons: ({
+                                    "openai": "smart_toy",
+                                    "gemini": "auto_awesome",
+                                    "mistral": "smart_toy",
+                                    "anthropic": "psychology",
+                                    "openai-response": "bolt"
+                                })
+                                text: formatIcons[providerItem.modelData?.api_format] ?? "smart_toy"
+                                iconSize: 20
+                                color: Appearance.m3colors.m3tertiary
+                            }
+
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 1
@@ -190,7 +203,7 @@ ContentPage {
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: (providerItem.modelData?.model ?? "") + " · " + (providerItem.modelData?.endpoint ?? "")
+                                    text: providerItem.modelData?.model ?? ""
                                     font.pixelSize: Appearance.font.pixelSize.smallest
                                     color: Appearance.colors.colSubtext
                                     elide: Text.ElideMiddle
@@ -199,22 +212,22 @@ ContentPage {
 
                             Rectangle {
                                 width: fmtLabel.implicitWidth + 12
-                                height: 20
-                                radius: Appearance.rounding.small
-                                color: ColorUtils.transparentize(Appearance.m3colors.m3tertiary, 0.85)
+                                height: 22
+                                radius: Appearance.rounding.full
+                                color: ColorUtils.transparentize(Appearance.m3colors.m3tertiary, 0.88)
 
                                 readonly property var formatLabels: ({
-                                    "openai": "OpenAI Chat",
+                                    "openai": "OpenAI",
                                     "gemini": "Gemini",
                                     "mistral": "Mistral",
                                     "anthropic": "Anthropic",
-                                    "openai-response": "OpenAI Response"
+                                    "openai-response": "Responses"
                                 })
 
                                 StyledText {
                                     id: fmtLabel
                                     anchors.centerIn: parent
-                                    text: parent.formatLabels[providerItem.modelData?.api_format] ?? providerItem.modelData?.api_format ?? "openai"
+                                    text: parent.formatLabels[providerItem.modelData?.api_format] ?? providerItem.modelData?.api_format ?? "OpenAI"
                                     font.pixelSize: Appearance.font.pixelSize.smallest
                                     font.weight: Font.Medium
                                     color: Appearance.m3colors.m3tertiary
@@ -234,8 +247,8 @@ ContentPage {
                                     providerForm.saveLabelText = Translation.tr("Save")
                                     providerNameInput.text = m?.name ?? ""
                                     providerEndpointInput.text = m?.endpoint ?? ""
-                                    apiFormatRow.selectedFormat = m?.api_format ?? "openai"
-                                    apiFormatRow._manualOverride = true
+                                    providerForm.selectedFormat = m?.api_format ?? "openai"
+                                    providerForm._manualOverride = true
                                     providerModelInput.text = m?.model ?? ""
                                     providerApiKeyInput.text = ""
                                     providerForm.expanded = true
@@ -284,27 +297,38 @@ ContentPage {
                 }
             }
 
-            StyledText {
+            ColumnLayout {
                 visible: (Config.options?.ai?.extraModels ?? []).length === 0
-                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
                 Layout.topMargin: 8
                 Layout.bottomMargin: 8
-                text: Translation.tr("No AI providers configured")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colSubtext
-                font.italic: true
-            }
+                spacing: 4
 
-            StyledText {
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                text: Translation.tr("Manage AI providers here. Providers are shared with the AI sidebar — use /model to switch between them.")
-                font.pixelSize: Appearance.font.pixelSize.smallest
-                color: Appearance.colors.colSubtext
-                wrapMode: Text.WordWrap
-                opacity: 0.7
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "neurology"
+                    iconSize: 28
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("No providers yet")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Add an AI provider to use the chat sidebar. Local models via Ollama and free OpenRouter models are loaded automatically.")
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                }
             }
 
             Rectangle {
@@ -316,6 +340,8 @@ ContentPage {
                 property int editingIndex: -1
                 property string titleText: Translation.tr("Add AI Provider")
                 property string saveLabelText: Translation.tr("Add")
+                property string selectedFormat: "openai"
+                property bool _manualOverride: false
 
                 implicitHeight: expanded ? aiAddFormCol.implicitHeight + 24 : 0
                 visible: expanded
@@ -397,99 +423,44 @@ ContentPage {
                             }
 
                             onTextChanged: {
-                                if (apiFormatRow._manualOverride) return
+                                if (providerForm._manualOverride) return
                                 const url = text.toLowerCase()
                                 if (url.includes("generativelanguage.googleapis.com")) {
-                                    apiFormatRow.selectedFormat = "gemini"
+                                    providerForm.selectedFormat = "gemini"
                                 } else if (url.includes("api.anthropic.com") || url.includes("/v1/messages")) {
-                                    apiFormatRow.selectedFormat = "anthropic"
+                                    providerForm.selectedFormat = "anthropic"
                                 } else if (url.includes("api.openai.com") || url.includes("/v1/chat/completions")) {
-                                    apiFormatRow.selectedFormat = "openai"
+                                    providerForm.selectedFormat = "openai"
                                 }
                             }
                         }
                     }
 
-                    ColumnLayout {
-                        spacing: 4
+                    ContentSubsection {
+                        title: Translation.tr("API format")
 
-                        StyledText {
-                            text: Translation.tr("API format")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colSubtext
+                        ConfigSelectionArray {
+                            enableSettingsSearch: false
+                            options: [
+                                { displayName: "OpenAI", icon: "smart_toy", value: "openai" },
+                                { displayName: "Gemini", icon: "auto_awesome", value: "gemini" },
+                                { displayName: "Anthropic", icon: "psychology", value: "anthropic" },
+                                { displayName: Translation.tr("Responses API"), icon: "bolt", value: "openai-response" }
+                            ]
+                            currentValue: providerForm.selectedFormat
+                            onSelected: (newValue) => {
+                                providerForm.selectedFormat = newValue
+                                providerForm._manualOverride = true
+                            }
                         }
 
-                        RowLayout {
-                            id: apiFormatRow
-                            spacing: 8
+                        StyledText {
                             Layout.fillWidth: true
-
-                            property string selectedFormat: "openai"
-                            property bool _manualOverride: false
-
-                            Repeater {
-                                model: [
-                                    { value: "openai", label: "OpenAI Chat", desc: Translation.tr("OpenAI / Mistral / Ollama / OpenRouter / vLLM / ...") },
-                                    { value: "gemini", label: "Gemini", desc: Translation.tr("Google Gemini API") },
-                                    { value: "anthropic", label: "Anthropic", desc: Translation.tr("Anthropic Messages API") },
-                                    { value: "openai-response", label: "OpenAI Response", desc: Translation.tr("New OpenAI Responses API") }
-                                ]
-
-                                Rectangle {
-                                    required property var modelData
-                                    required property int index
-
-                                    readonly property bool selected: apiFormatRow.selectedFormat === modelData.value
-
-                                    Layout.fillWidth: true
-                                    implicitHeight: fmtBtnCol.implicitHeight + 16
-                                    radius: Appearance.rounding.small
-                                    color: selected
-                                        ? Appearance.colors.colPrimary
-                                        : formatBtnMA.containsMouse
-                                            ? Appearance.colors.colLayer1Hover
-                                            : Appearance.colors.colLayer1
-                                    border.width: selected ? 0 : 1
-                                    border.color: Appearance.colors.colLayer0Border
-
-                                    Behavior on color {
-                                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
-                                    }
-
-                                    ColumnLayout {
-                                        id: fmtBtnCol
-                                        anchors.centerIn: parent
-                                        spacing: 2
-
-                                        StyledText {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            text: modelData.label
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            font.weight: selected ? Font.DemiBold : Font.Normal
-                                            color: selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
-                                        }
-
-                                        StyledText {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: selected
-                                            text: modelData.desc
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            color: selected ? ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.8) : Appearance.colors.colSubtext
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: formatBtnMA
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            apiFormatRow.selectedFormat = modelData.value
-                                            apiFormatRow._manualOverride = true
-                                        }
-                                    }
-                                }
-                            }
+                            visible: providerForm.selectedFormat === "openai"
+                            text: Translation.tr("Compatible with OpenAI, Mistral, Ollama, OpenRouter, vLLM, and any OpenAI-compatible endpoint.")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colSubtext
+                            wrapMode: Text.WordWrap
                         }
                     }
 
@@ -563,7 +534,8 @@ ContentPage {
                                 providerForm.editingIndex = -1
                                 providerNameInput.text = ""
                                 providerEndpointInput.text = ""
-                                apiFormatRow.selectedFormat = "openai"
+                                providerForm.selectedFormat = "openai"
+                                providerForm._manualOverride = false
                                 providerModelInput.text = ""
                                 providerApiKeyInput.text = ""
                             }
@@ -594,7 +566,7 @@ ContentPage {
                                     name: providerNameInput.text.trim() || modelCode,
                                     endpoint: providerEndpointInput.text.trim(),
                                     model: modelCode,
-                                    api_format: apiFormatRow.selectedFormat,
+                                    api_format: providerForm.selectedFormat,
                                     requires_key: apiKey.length > 0,
                                     key_id: keyId,
                                 }
@@ -621,8 +593,8 @@ ContentPage {
                                 providerForm.editingIndex = -1
                                 providerNameInput.text = ""
                                 providerEndpointInput.text = ""
-                                apiFormatRow.selectedFormat = "openai"
-                                apiFormatRow._manualOverride = false
+                                providerForm.selectedFormat = "openai"
+                                providerForm._manualOverride = false
                                 providerModelInput.text = ""
                                 providerApiKeyInput.text = ""
                             }
