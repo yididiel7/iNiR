@@ -588,9 +588,15 @@ Singleton {
                     }
                 }
                 property JsonObject cava: JsonObject {
+                    property string colorSource: "theme" // theme | vibrant | cover
+                    property int gradientCount: 8 // 2-8, external cava ~/.config/cava/config
+                    property string foreground: "" // empty = gradient; hex = solid foreground
+                    property string background: "" // empty = palette surface; hex = override
                     property int sensitivity: 100 // 1-500
                     property int bars: 0 // 0 = auto
                     property int framerate: 60 // 30-165
+                    property int barWidth: 2
+                    property int barSpacing: 1
                     property bool stereo: true
                     property int waveOpacity: 30 // 5-100, fill alpha for WaveVisualizer (0.05–1.0)
                 }

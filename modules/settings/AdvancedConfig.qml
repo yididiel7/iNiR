@@ -184,6 +184,34 @@ ContentPage {
                 visible: cavaSwitch.checked
                 title: Translation.tr("Cava options")
 
+                ConfigSelectionArray {
+                    currentValue: Config.options?.appearance?.cava?.colorSource ?? "theme"
+                    onSelected: newValue => {
+                        Config.setNestedValue("appearance.cava.colorSource", newValue)
+                        colorRegenTimer.restart()
+                    }
+                    options: [
+                        { displayName: Translation.tr("Theme palette"), value: "theme" },
+                        { displayName: Translation.tr("Vibrant (saturated)"), value: "vibrant" },
+                        { displayName: Translation.tr("Album cover"), value: "cover" },
+                    ]
+                }
+
+                ConfigSpinBox {
+                    icon: "gradient"
+                    text: Translation.tr("Gradient colors")
+                    value: Config.options?.appearance?.cava?.gradientCount ?? 8
+                    from: 2
+                    to: 8
+                    onValueChanged: {
+                        Config.setNestedValue("appearance.cava.gradientCount", value)
+                        colorRegenTimer.restart()
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Gradient stops for standalone cava (~/.config/cava/config)")
+                    }
+                }
+
                 ConfigSpinBox {
                     icon: "hearing"
                     text: Translation.tr("Sensitivity")
@@ -249,6 +277,8 @@ ContentPage {
                     colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     onClicked: {
+                        Config.setNestedValue("appearance.cava.colorSource", "theme");
+                        Config.setNestedValue("appearance.cava.gradientCount", 8);
                         Config.setNestedValue("appearance.cava.sensitivity", 100);
                         Config.setNestedValue("appearance.cava.bars", 0);
                         Config.setNestedValue("appearance.cava.framerate", 60);

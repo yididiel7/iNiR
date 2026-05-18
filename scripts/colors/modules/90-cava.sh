@@ -6,6 +6,8 @@ COLOR_MODULE_ID="cava"
 
 PALETTE_FILE="$STATE_DIR/user/generated/palette.json"
 COVER_COLORS_FILE="$STATE_DIR/user/generated/cover-colors.json"
+CAVA_ACTIVE_COVER_FILE="$STATE_DIR/user/generated/cava-active-cover.path"
+CAVA_EXTRACT_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../cava" && pwd)/extract_cover_colors.py"
 CAVA_CONFIG_DIR="$XDG_CONFIG_HOME/cava"
 CAVA_CONFIG="$CAVA_CONFIG_DIR/config"
 
@@ -77,9 +79,42 @@ build_gradient_vibrant() {
   printf '%s\n' "${colors[@]}"
 }
 
+find_cover_art_path() {
+  local path=""
+  if [[ -f "$CAVA_ACTIVE_COVER_FILE" ]]; then
+    path="$(tr -d '\n' <"$CAVA_ACTIVE_COVER_FILE")"
+    [[ -n "$path" && -f "$path" ]] && { printf '%s\n' "$path"; return 0; }
+  fi
+  local cover_cache="${XDG_CACHE_HOME}/media/coverart"
+  if [[ -d "$cover_cache" ]]; then
+    path="$(find "$cover_cache" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -printf '%T@ %p\n' 2>/dev/null \
+      | sort -rn | head -1 | cut -d' ' -f2- || true)"
+    [[ -n "$path" && -f "$path" ]] && { printf '%s\n' "$path"; return 0; }
+  fi
+  return 1
+}
+
+refresh_cover_colors() {
+  local count="$1"
+  local art_path
+  art_path="$(find_cover_art_path || true)"
+  [[ -n "$art_path" ]] || { log_module "No cover art path for extraction"; return 1; }
+  if [[ ! -x "$CAVA_EXTRACT_SCRIPT" && ! -f "$CAVA_EXTRACT_SCRIPT" ]]; then
+    log_module "extract_cover_colors.py missing"
+    return 1
+  fi
+  if python3 "$CAVA_EXTRACT_SCRIPT" "$art_path" "$count" "$COVER_COLORS_FILE"; then
+    log_module "Extracted cover colors from $(basename "$art_path")"
+    return 0
+  fi
+  log_module "Cover color extraction failed for $(basename "$art_path")"
+  return 1
+}
+
 # Build gradient from album art cover colors
 build_gradient_cover() {
   local count="$1"
+  refresh_cover_colors "$count" || true
   [[ -f "$COVER_COLORS_FILE" ]] || { log_module "No cover colors file, falling back to theme"; build_gradient_theme "$count"; return; }
   local -a colors=()
   local c
@@ -113,6 +148,10 @@ generate_managed_block() {
   # Clamp gradient count
   (( gradient_count < 2 )) && gradient_count=2
   (( gradient_count > 8 )) && gradient_count=8
+
+  if [[ "$color_source" == "cover" ]]; then
+    refresh_cover_colors "$gradient_count" || true
+  fi
 
   # Build gradient based on source
   local -a gradient=()
