@@ -139,7 +139,7 @@ Scope {
 
     Timer {
         id: _closeTimer
-        interval: 450
+        interval: Appearance.calcEffectiveDuration(450)
         repeat: false
         onTriggered: root._closing = false
     }
@@ -172,7 +172,7 @@ Scope {
 
             Timer {
                 id: contentEntryTimer
-                interval: 80
+                interval: Appearance.calcEffectiveDuration(80)
                 repeat: false
                 onTriggered: panelWindow._contentReady = true
             }

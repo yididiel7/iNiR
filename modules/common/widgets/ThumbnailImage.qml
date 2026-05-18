@@ -19,7 +19,7 @@ StyledImage {
     property bool isVideo: Images.isValidVideoByName(sourcePath)
     property bool thumbnailAvailable: false
     property string resolvedThumbnailSource: ""
-    property string _pendingThumbnailCheck: ""
+    property string _queuedThumbnailCheck: ""
     property string thumbnailPath: {
         if (sourcePath.length === 0) return ""
 
@@ -44,7 +44,12 @@ StyledImage {
 
     opacity: status === Image.Ready ? 1 : 0
     Behavior on opacity {
-        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        enabled: Appearance.animationsEnabled
+        animation: NumberAnimation {
+            duration: Appearance.calcEffectiveDuration(Appearance.animation.elementMoveFast.duration)
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
 
     // Queue thumbnail generation through Wallpapers' serial queue instead of
@@ -64,35 +69,41 @@ StyledImage {
     }
 
     function _startThumbnailCheck() {
-        if (root._pendingThumbnailCheck.length === 0 || _thumbnailCheckProc.running) return
-        _thumbnailCheckProc._targetPath = root._pendingThumbnailCheck
-        root._pendingThumbnailCheck = ""
-        _thumbnailCheckProc.command = ["test", "-f", _thumbnailCheckProc._targetPath]
+        if (root._queuedThumbnailCheck.length === 0 || _thumbnailCheckProc.running) return
+        const targetPath = root._queuedThumbnailCheck
+        root._queuedThumbnailCheck = ""
+        _thumbnailCheckProc._targetPath = targetPath
+        _thumbnailCheckProc.command = ["test", "-f", targetPath]
         _thumbnailCheckProc.running = true
     }
 
     function reloadThumbnail() {
         if (!root.sourcePath || root.sourcePath.length === 0 || !root.thumbnailPath || root.thumbnailPath.length === 0) {
-            root._pendingThumbnailCheck = ""
+            root._queuedThumbnailCheck = ""
             root._clearResolvedThumbnail()
             return
         }
 
         const normalizedThumbnailPath = FileUtils.trimFileProtocol(root.thumbnailPath)
         if (Wallpapers.hasKnownThumbnail(normalizedThumbnailPath)) {
+            root._queuedThumbnailCheck = ""
             root.thumbnailAvailable = true
             root.resolvedThumbnailSource = root.thumbnailPath
             return
         }
 
         root._clearResolvedThumbnail()
-        root._pendingThumbnailCheck = normalizedThumbnailPath
+        root._queuedThumbnailCheck = normalizedThumbnailPath
         root._startThumbnailCheck()
     }
 
     onStatusChanged: {
-        if (status === Image.Ready)
+        if (status === Image.Ready) {
             Wallpapers.rememberThumbnail(root.thumbnailPath)
+        } else if (status === Image.Error && root.resolvedThumbnailSource.length > 0) {
+            Wallpapers.forgetThumbnail(root.thumbnailPath)
+            root.reloadThumbnail()
+        }
     }
 
     onSourcePathChanged: {
@@ -127,14 +138,23 @@ StyledImage {
         property string _targetPath: ""
         onExited: (exitCode) => {
             const currentThumbnailPath = FileUtils.trimFileProtocol(root.thumbnailPath)
+            const checkedPath = _thumbnailCheckProc._targetPath
 
-            if (_thumbnailCheckProc._targetPath === currentThumbnailPath && exitCode === 0) {
+            if (checkedPath === currentThumbnailPath && exitCode === 0) {
                 Wallpapers.rememberThumbnail(currentThumbnailPath)
                 root.thumbnailAvailable = true
                 root.resolvedThumbnailSource = root.thumbnailPath
-            } else if (_thumbnailCheckProc._targetPath === currentThumbnailPath) {
+            } else if (checkedPath === currentThumbnailPath) {
+                Wallpapers.forgetThumbnail(currentThumbnailPath)
                 root._clearResolvedThumbnail()
                 root._ensureThumbnail()
+            }
+
+            if (root._queuedThumbnailCheck.length === 0
+                    && currentThumbnailPath.length > 0
+                    && checkedPath !== currentThumbnailPath
+                    && !Wallpapers.hasKnownThumbnail(currentThumbnailPath)) {
+                root._queuedThumbnailCheck = currentThumbnailPath
             }
 
             root._startThumbnailCheck()

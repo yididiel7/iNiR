@@ -39,7 +39,7 @@ Scope {
 
         Timer {
             id: closingTimer
-            interval: 350
+            interval: Appearance.calcEffectiveDuration(350)
         }
 
         Connections {

@@ -273,6 +273,14 @@ Singleton {
         root._knownThumbnailOutputs = nextKnown
     }
 
+    function forgetThumbnail(outputPath: string): void {
+        const normalizedPath = FileUtils.trimFileProtocol(String(outputPath ?? ""))
+        if (!normalizedPath || !root._knownThumbnailOutputs[normalizedPath]) return
+        const nextKnown = Object.assign({}, root._knownThumbnailOutputs)
+        delete nextKnown[normalizedPath]
+        root._knownThumbnailOutputs = nextKnown
+    }
+
     function load() {}
     function refresh() {} // Compatibility - FolderListModel auto-refreshes
 
