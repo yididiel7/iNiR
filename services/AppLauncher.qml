@@ -114,10 +114,10 @@ Singleton {
             id: "taskManager",
             label: Translation.tr("Task manager"),
             description: Translation.tr("Used by the start menu, actions, and session tools."),
-            defaultCommand: "mission-center",
-            placeholder: "mission-center",
+            defaultCommand: "missioncenter",
+            placeholder: "missioncenter",
             presets: [
-                { id: "mission-center", label: "Mission Center", command: "mission-center" },
+                { id: "missioncenter", label: "Mission Center", command: "missioncenter" },
                 { id: "resources", label: "GNOME Resources", command: "resources" },
                 { id: "plasma-monitor", label: "KSysGuard", command: "plasma-systemmonitor" },
                 { id: "btop", label: "btop", command: "kitty -e btop" }
