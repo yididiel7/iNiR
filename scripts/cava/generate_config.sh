@@ -41,9 +41,6 @@ if [[ -f "$RESOLVER" ]]; then
 fi
 if [[ -n "$RESOLVED" ]]; then
   MONITOR="$RESOLVED"
-elif pactl list sink-inputs 2>/dev/null | grep -q "^Sink Input #"; then
-  # Audio is playing but nothing scored as music — avoid default sink (Discord, calls, etc.)
-  MONITOR="__inir_no_music__"
 else
   MONITOR=$(get_default_monitor)
 fi
