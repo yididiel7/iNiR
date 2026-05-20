@@ -415,8 +415,8 @@ _inir_quickshell_rebuild_cmd() {
     case "$kind" in
         arch-aur-foreign)   printf '%s -S --rebuild --noconfirm %s' "$helper" "$pkg" ;;
         arch-repo-binary)   printf '%s -Sa --noconfirm --skipreview %s' "$helper" "$pkg" ;;
-        arch-repo-official) printf 'sudo pacman -Syu --noconfirm' ;;
-        arch-aur-bin)       printf '%s -Rdd --noconfirm quickshell-bin && %s -Sa --noconfirm --skipreview quickshell-git' "$helper" "$helper" ;;
+        arch-repo-official) printf 'sudo pacman -Rdd --noconfirm quickshell && %s -S --noconfirm quickshell-git' "$helper" ;;
+        arch-aur-bin)       printf 'sudo pacman -Rdd --noconfirm quickshell-bin && %s -S --noconfirm quickshell-git' "$helper" ;;
         fedora-pkg)         printf 'sudo dnf upgrade --refresh -y %s' "$pkg" ;;
         nixos)              printf 'sudo nixos-rebuild switch --upgrade' ;;
         debian|source|unknown|*) ;;  # No automatic path
