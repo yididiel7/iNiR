@@ -113,7 +113,6 @@ depends=(
   ttf-roboto
   ttf-roboto-mono
   papirus-icon-theme
-  millennium-bin
 
   #--- Desktop integration ---
   polkit
@@ -170,6 +169,7 @@ optdepends=(
   'ttf-rubik-vf: alternate UI font'
   'ttf-oxanium: display font'
   'adw-gtk-theme: GTK theme for Material colors'
+  'millennium-bin: Steam theming via Millennium (requires steam)'
   'capitaine-cursors: cursor theme'
   'whitesur-icon-theme: macOS-style icons'
   'qt6-avif-image-plugin: AVIF wallpaper support'

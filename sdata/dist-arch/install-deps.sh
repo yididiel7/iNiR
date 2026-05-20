@@ -324,10 +324,12 @@ v pkg_sudo pacman -S $installflags "${OFFICIAL_PACKAGES[@]}"
 tui_info "Installing AUR packages..."
 
 REQUIRED_AUR_PACKAGES=(
-  millennium-bin
 )
 
 AUR_PACKAGES=(
+  # Steam theming (optional — only needed if user has Steam installed)
+  millennium-bin
+
   # Qt6 extras (not in official repos)
   qt6-avif-image-plugin
 
