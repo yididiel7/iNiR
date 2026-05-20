@@ -47,7 +47,7 @@ AbstractWidget {
         return Math.max(0, Math.min(1, Number.isFinite(v) ? v / 100 : 1.0));
     }
     readonly property bool showBackground: root._readConfigKey("showBackground") ?? true
-    readonly property bool useBlur: root._readConfigKey("useBlur") ?? true
+    readonly property bool useBlur: root._readConfigKey("useBlur") ?? !(Appearance.auroraEverywhere || Appearance.angelEverywhere)
     readonly property bool showBorder: root._readConfigKey("showBorder") ?? true
     // Granular card controls — override booleans when present
     readonly property real backgroundOpacity: {
@@ -237,18 +237,20 @@ AbstractWidget {
         && Config.ready
         && root.width > 0 && root.height > 0
         && !(GlobalStates.widgetEditMode && (root.isDragging || root.containsPress || root._isResizing || root._releaseGuard))
+    readonly property bool _xOverflows: root.x + root.width > root.scaledScreenWidth
+    readonly property bool _yOverflows: root.y + root.height > root.scaledScreenHeight
     Binding {
         target: root
         property: "x"
         value: Math.max(0, root.scaledScreenWidth - root.width)
-        when: root._freeModeOverflowGuard && (root.x + root.width > root.scaledScreenWidth)
+        when: root._freeModeOverflowGuard && root._xOverflows
         restoreMode: Binding.RestoreNone
     }
     Binding {
         target: root
         property: "y"
         value: Math.max(0, root.scaledScreenHeight - root.height)
-        when: root._freeModeOverflowGuard && (root.y + root.height > root.scaledScreenHeight)
+        when: root._freeModeOverflowGuard && root._yOverflows
         restoreMode: Binding.RestoreNone
     }
     Behavior on x {
