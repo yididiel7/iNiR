@@ -102,8 +102,11 @@ Singleton {
 
     function setNestedValue(nestedKey, value) {
         _applyNestedKey(nestedKey, value);
-        // Custom paths don't touch the adapter so onAdapterUpdated won't fire.
-        // Restart the timer explicitly to cover both adapter and custom writes.
+        // Track the mutation for direct disk write
+        const key = Array.isArray(nestedKey) ? nestedKey.join(".") : nestedKey;
+        const mutations = Object.assign({}, root._pendingMutations);
+        mutations[key] = value;
+        root._pendingMutations = mutations;
         fileWriteTimer.restart();
         root._bumpRevision();
         root.configChanged();
@@ -115,10 +118,13 @@ Singleton {
         if (!updates || typeof updates !== "object")
             return;
         const paths = Object.keys(updates);
+        const mutations = Object.assign({}, root._pendingMutations);
         for (let i = 0; i < paths.length; ++i) {
             _applyNestedKey(paths[i], updates[paths[i]]);
+            mutations[paths[i]] = updates[paths[i]];
         }
         if (paths.length > 0) {
+            root._pendingMutations = mutations;
             fileWriteTimer.restart();
             root._bumpRevision();
             root.configChanged();
@@ -183,6 +189,9 @@ Singleton {
     property bool _pendingCustomInject: false
     property bool _pendingReload: false
     property var _customSnapshotForInject: ({})
+    // Accumulate key-value mutations between write timer ticks.
+    // Applied directly to disk JSON, bypassing adapter serialization entirely.
+    property var _pendingMutations: ({})
 
     function _cloneObject(obj: var): var {
         try {
@@ -222,21 +231,40 @@ Singleton {
             root.customWidgetData = root._cloneObject(root._customSnapshotForInject);
     }
 
-    // Direct write: serialize adapter state to JSON via setText.
-    // Bypasses writeAdapter() which in QS 0.3 may not emit onSaved when
-    // sub-JsonObject mutations aren't detected as dirty.
+    // Direct write: read current disk JSON, apply pending mutations, write back.
+    // Does NOT read from the adapter — QS 0.3's QObjects don't reliably reflect
+    // JS mutations to nested properties via Object.keys/property access.
     function _writeDirectFromAdapter(): void {
         try {
-            const adapterText = JSON.stringify(root.options);
-            const adapterObj = JSON.parse(adapterText);
-            if (root._hasObjectKeys(root.customWidgetData)) {
-                if (!adapterObj.background) adapterObj.background = {};
-                if (!adapterObj.background.widgets) adapterObj.background.widgets = {};
-                adapterObj.background.widgets.custom = root.customWidgetData;
-            }
-            const newText = JSON.stringify(adapterObj, null, 4);
+            const mutations = root._pendingMutations;
+            root._pendingMutations = ({});
+
+            // Read the current disk state as base
             const currentText = configFileView.text() ?? "";
-            if (newText === currentText) {
+            let obj = currentText.length > 0 ? JSON.parse(currentText) : {};
+
+            // Apply accumulated mutations
+            const keys = Object.keys(mutations);
+            for (let i = 0; i < keys.length; i++) {
+                const path = keys[i].split(".");
+                let target = obj;
+                for (let j = 0; j < path.length - 1; j++) {
+                    if (!target[path[j]] || typeof target[path[j]] !== "object")
+                        target[path[j]] = {};
+                    target = target[path[j]];
+                }
+                target[path[path.length - 1]] = mutations[keys[i]];
+            }
+
+            // Re-inject custom widget data
+            if (root._hasObjectKeys(root.customWidgetData)) {
+                if (!obj.background) obj.background = {};
+                if (!obj.background.widgets) obj.background.widgets = {};
+                obj.background.widgets.custom = root.customWidgetData;
+            }
+
+            const newText = JSON.stringify(obj, null, 4);
+            if (newText === currentText && keys.length === 0) {
                 root._writeInFlight = false;
                 if (root._pendingWrite) {
                     root._pendingWrite = false;
