@@ -24,7 +24,7 @@ Scope {
     readonly property real dockHeight: Config.options?.dock?.height ?? 60
     readonly property real dockMargin: Appearance.sizes.elevationMargin + Appearance.sizes.hyprlandGapsOut
     property real popupRounding: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
-    readonly property bool visualizerActive: mediaControlsLoader.active && (root.allPlayers?.length ?? 0) > 0
+    readonly property bool visualizerActive: mediaControlsLoader.active && MprisController.isPlaying
 
     CavaProcess {
         id: cavaProcess

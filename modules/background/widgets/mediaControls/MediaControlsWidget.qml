@@ -122,8 +122,8 @@ AbstractBackgroundWidget {
     implicitWidth: widgetWidth
     implicitHeight: playerColumnLayout.implicitHeight
 
-    readonly property bool visualizerActive: (Config.getNestedValue("background.widgets.mediaControls.enable", false))
-        && (root.meaningfulPlayers?.length ?? 0) > 0
+    readonly property bool visualizerActive: (Config.options?.background?.widgets?.mediaControls?.enable ?? false)
+        && root.visible && MprisController.isPlaying
 
     CavaProcess {
         id: cavaProcess

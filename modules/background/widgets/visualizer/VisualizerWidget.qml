@@ -99,7 +99,8 @@ AbstractBackgroundWidget {
         }
     }
 
-    readonly property bool _active: Config.getNestedValue("background.widgets.visualizer.enable", false)
+    readonly property bool _active: (Config.options?.background?.widgets?.visualizer?.enable ?? false)
+        && root.visible && MprisController.isPlaying
 
     // ── Dim factor (0..1) ──────────────────────────────────────
     property real dimFactor: {
