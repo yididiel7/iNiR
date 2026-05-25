@@ -264,7 +264,20 @@ Singleton {
         const bezier = _mappedTransitionBezier()
         const angle = _mappedTransitionAngle()
         const lines = [
-            "if ! pgrep -x awww-daemon >/dev/null 2>&1; then nohup awww-daemon >/dev/null 2>&1 & sleep 0.35; fi"
+            `
+                awww_bin=$(command -v awww 2>/dev/null || true)
+                daemon_bin=$(command -v awww-daemon 2>/dev/null || true)
+                if [ -n "$awww_bin" ] && [ -n "$daemon_bin" ] && ! "$awww_bin" query >/dev/null 2>&1; then
+                    if command -v systemd-run >/dev/null 2>&1; then
+                        if ! systemd-run --user --quiet --collect --property=Description="iNiR wallpaper daemon" --setenv="WAYLAND_DISPLAY=$WAYLAND_DISPLAY" --setenv="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" -- "$daemon_bin" >/dev/null 2>&1; then
+                            nohup "$daemon_bin" >/dev/null 2>&1 &
+                        fi
+                    else
+                        nohup "$daemon_bin" >/dev/null 2>&1 &
+                    fi
+                    for _ in 1 2 3 4 5 6 7 8 9 10; do "$awww_bin" query >/dev/null 2>&1 && break; sleep 0.1; done
+                fi
+            `
         ]
 
         for (const key of keys) {
