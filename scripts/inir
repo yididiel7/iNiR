@@ -516,6 +516,503 @@ _inir_run_quickshell_rebuild() {
     return 1
 }
 
+_inir_perf_sensor_label() {
+    local path="$1" base label name dir type_dir type
+    if [[ "$path" == /sys/class/hwmon/*/temp*_input ]]; then
+        base="${path%_input}"
+        dir="$(dirname -- "$path")"
+        label="$(cat "${base}_label" 2>/dev/null || true)"
+        name="$(cat "$dir/name" 2>/dev/null || true)"
+        if [[ -n "$name" && -n "$label" ]]; then
+            printf '%s/%s' "$name" "$label"
+        elif [[ -n "$name" ]]; then
+            printf '%s' "$name"
+        elif [[ -n "$label" ]]; then
+            printf '%s' "$label"
+        else
+            printf '(unlabeled hwmon)'
+        fi
+        return
+    fi
+
+    if [[ "$path" == /sys/class/thermal/thermal_zone*/temp ]]; then
+        type_dir="$(dirname -- "$path")"
+        type="$(cat "$type_dir/type" 2>/dev/null || true)"
+        printf '%s' "${type:-thermal_zone}"
+        return
+    fi
+
+    printf '(unknown)'
+}
+
+_inir_perf_temp_celsius() {
+    local path="$1" raw
+    raw="$(cat "$path" 2>/dev/null || true)"
+    if [[ "$raw" =~ ^-?[0-9]+$ ]]; then
+        printf '%d' "$((raw / 1000))"
+    else
+        printf '?'
+    fi
+}
+
+_inir_perf_detect_temp_paths() {
+    local cpu_path="" gpu_path="" cpu_priority=0
+    local hwmon name temp f label priority_level gpu_edge lf gl tz type
+
+    for hwmon in /sys/class/hwmon/hwmon*; do
+        [[ -f "$hwmon/name" ]] || continue
+        name="$(cat "$hwmon/name" 2>/dev/null || true)"
+
+        temp=""
+        if [[ "$name" == "k10temp" || "$name" == "zenpower" ]]; then
+            for f in "$hwmon"/temp*_label; do
+                [[ -f "$f" ]] || continue
+                label="$(cat "$f" 2>/dev/null || true)"
+                if [[ "$label" == "Tdie" ]]; then
+                    temp="${f%_label}_input"
+                    break
+                fi
+            done
+        fi
+        if [[ -z "$temp" ]]; then
+            for f in "$hwmon"/temp1_input "$hwmon"/temp*_input; do
+                [[ -f "$f" ]] && temp="$f" && break
+            done
+        fi
+        [[ -n "$temp" ]] || continue
+
+        priority_level=0
+        case "$name" in
+            coretemp|k10temp|zenpower|cpu_thermal|fam15h_power|via_cputemp) priority_level=3 ;;
+            thinkpad|dell_smm|hp_wmi|asus_ec|it87|nct6775|w83627ehf|lm75|lm78|lm85) priority_level=2 ;;
+            acpitz|pch_*) priority_level=1 ;;
+        esac
+
+        if [[ "$priority_level" -gt "$cpu_priority" ]]; then
+            cpu_priority="$priority_level"
+            cpu_path="$temp"
+        fi
+
+        case "$name" in
+            amdgpu|radeon|nvidia|nouveau|i915|xe|panfrost|lima|v3d|vc4)
+                if [[ -z "$gpu_path" ]]; then
+                    gpu_edge=""
+                    for lf in "$hwmon"/temp*_label; do
+                        [[ -f "$lf" ]] || continue
+                        gl="$(cat "$lf" 2>/dev/null || true)"
+                        [[ "$gl" == "edge" ]] && gpu_edge="$lf" && break
+                    done
+                    if [[ -n "$gpu_edge" ]]; then
+                        gpu_path="${gpu_edge%_label}_input"
+                    else
+                        gpu_path="$temp"
+                    fi
+                fi
+                ;;
+        esac
+    done
+
+    if [[ -z "$cpu_path" || -z "$gpu_path" ]]; then
+        for tz in /sys/class/thermal/thermal_zone*; do
+            [[ -f "$tz/temp" ]] || continue
+            type="$(cat "$tz/type" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+
+            if [[ -z "$cpu_path" ]]; then
+                case "$type" in
+                    *cpu*|x86_pkg_temp|acpitz|*soc*|*core*|*package*|*processor*|int3400*|pch*|b0d4*)
+                        cpu_path="$tz/temp" ;;
+                esac
+            fi
+
+            if [[ -z "$gpu_path" ]]; then
+                case "$type" in
+                    *gpu*|*radeon*|*amdgpu*|*nvidia*)
+                        gpu_path="$tz/temp" ;;
+                esac
+            fi
+        done
+    fi
+
+    [[ -n "$cpu_path" ]] && printf 'cpu:%s:%s:%s\n' "$cpu_path" "$(_inir_perf_sensor_label "$cpu_path")" "$(_inir_perf_temp_celsius "$cpu_path")"
+    [[ -n "$gpu_path" ]] && printf 'gpu:%s:%s:%s\n' "$gpu_path" "$(_inir_perf_sensor_label "$gpu_path")" "$(_inir_perf_temp_celsius "$gpu_path")"
+}
+
+_inir_perf_detect_gpu_usage_source() {
+    local nvidia_path="" is_nvidia="" vendor_file vendor card path name
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia_path="$(command -v nvidia-smi)"
+    fi
+
+    for vendor_file in /sys/class/drm/card*/device/vendor; do
+        [[ -f "$vendor_file" ]] || continue
+        vendor="$(cat "$vendor_file" 2>/dev/null || true)"
+        [[ "$vendor" == "0x10de" ]] && is_nvidia=1 && break
+    done
+
+    if [[ -n "$is_nvidia" && -n "$nvidia_path" ]]; then
+        printf 'nvidia-smi:%s\n' "$nvidia_path"
+        return
+    fi
+
+    for card in /sys/class/drm/card*; do
+        [[ -d "$card" ]] || continue
+        name="$(basename -- "$card")"
+        [[ "$name" =~ ^card[0-9]+$ ]] || continue
+        path="$card/device/gpu_busy_percent"
+        if [[ -f "$path" ]]; then
+            printf 'sysfs:%s\n' "$path"
+            return
+        fi
+    done
+
+    if [[ -n "$nvidia_path" ]]; then
+        printf 'nvidia-smi:%s\n' "$nvidia_path"
+    else
+        printf 'none\n'
+    fi
+}
+
+_inir_perf_detect_hybrid_runtime() {
+    local igpu_found="" dgpu_runtime="" card name bvga_file bvga runtime
+    for card in /sys/class/drm/card*/; do
+        [[ -d "$card" ]] || continue
+        name="$(basename -- "$card")"
+        [[ "$name" =~ ^card[0-9]+$ ]] || continue
+        bvga_file="${card}device/boot_vga"
+        [[ -f "$bvga_file" ]] || continue
+        bvga="$(cat "$bvga_file" 2>/dev/null || true)"
+        if [[ "$bvga" == "1" ]]; then
+            igpu_found=1
+        elif [[ "$bvga" == "0" ]]; then
+            runtime="${card}device/power/runtime_status"
+            [[ -f "$runtime" ]] && dgpu_runtime="$runtime"
+        fi
+    done
+
+    if [[ -n "$igpu_found" && -n "$dgpu_runtime" ]]; then
+        printf 'dgpu:%s\n' "$dgpu_runtime"
+    else
+        printf 'none\n'
+    fi
+}
+
+# Print a runtime perf snapshot of the running shell. Used by support triage
+# when users report "shell uses too much RAM / CPU / heats up the laptop".
+# Prints process stats, top heap/file mappings, child processes, enabled
+# features, and heuristic recommendations.
+_inir_doctor_perf() {
+    local pid=""
+    if command -v "$qs_bin" >/dev/null 2>&1; then
+        pid="$("$qs_bin" list --all 2>/dev/null | awk '
+            /^Instance / { candidate="" }
+            /Process ID:/ { candidate=$3 }
+            /Shell ID:[[:space:]]*inir/ { print candidate; exit }
+            /^iNiR/ { found=1 }
+            found && /^[[:space:]]*PID:/ { print $2; exit }
+        ')"
+    fi
+    if [[ -n "$pid" && ( ! "$pid" =~ ^[0-9]+$ || ! -d "/proc/$pid" ) ]]; then
+        pid=""
+    fi
+    if [[ -z "$pid" ]]; then
+        pid="$(ps -eo pid=,args= 2>/dev/null | awk -v self="$$" '
+            $1 != self && $0 ~ /(^|\/)qs([[:space:]]|$)/ && $0 ~ /inir/ { print $1; exit }
+        ')"
+    fi
+    if [[ -z "$pid" ]] || ! [[ -d "/proc/$pid" ]]; then
+        echo "iNiR: no running shell found. Start it with 'inir' or 'inir restart' first." >&2
+        return 1
+    fi
+
+    local recommendations=()
+
+    printf '=== iNiR perf snapshot ===\n'
+    printf 'Date:       %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
+
+    resolve_config_dir 2>/dev/null || true
+
+    local inir_version="(unknown)"
+    if [[ -n "$config_dir" && -f "$config_dir/VERSION" ]]; then
+        inir_version="$(tr -d '[:space:]' < "$config_dir/VERSION" 2>/dev/null || true)"
+    fi
+    [[ -z "$inir_version" ]] && inir_version="(unknown)"
+    local inir_commit="(unknown)"
+    if [[ -n "$config_dir" ]] && command -v git >/dev/null 2>&1; then
+        inir_commit="$(git -C "$config_dir" rev-parse --short HEAD 2>/dev/null || echo '(unknown)')"
+    fi
+    local qs_ver="(unknown)" qt_ver="(unknown)"
+    if command -v "$qs_bin" >/dev/null 2>&1; then
+        qs_ver="$("$qs_bin" --version 2>&1 | awk 'NR==1{print $2; exit}' || true)"
+        [[ -z "$qs_ver" ]] && qs_ver="(unknown)"
+    fi
+    if [[ -L /usr/lib/libQt6Core.so.6 ]]; then
+        qt_ver="$(readlink /usr/lib/libQt6Core.so.6 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+        [[ -z "$qt_ver" ]] && qt_ver="(unknown)"
+    fi
+    local compositor="unknown"
+    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then compositor="hyprland"
+    elif [[ -n "${NIRI_SOCKET:-}" ]]; then compositor="niri"
+    elif [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then compositor="$XDG_CURRENT_DESKTOP"
+    fi
+    printf 'Version:    %s (%s)\n' "$inir_version" "$inir_commit"
+    printf 'Quickshell: %s | Qt: %s | Compositor: %s\n' "$qs_ver" "$qt_ver" "$compositor"
+    printf '\n'
+
+    printf '=== Shell process (PID %s) ===\n' "$pid"
+    if [[ -r "/proc/$pid/status" ]]; then
+        local vmrss vmsize swap threads swap_note=""
+        vmrss="$(awk '/^VmRSS:/{print $2}' "/proc/$pid/status" 2>/dev/null || true)"
+        vmsize="$(awk '/^VmSize:/{print $2}' "/proc/$pid/status" 2>/dev/null || true)"
+        swap="$(awk '/^VmSwap:/{print $2}' "/proc/$pid/status" 2>/dev/null || true)"
+        threads="$(awk '/^Threads:/{print $2}' "/proc/$pid/status" 2>/dev/null || true)"
+        vmrss="${vmrss:-0}"
+        vmsize="${vmsize:-0}"
+        swap="${swap:-0}"
+        threads="${threads:-?}"
+        [[ "$swap" =~ ^[0-9]+$ && "$swap" -gt 51200 ]] && swap_note='  (swapping — perf degrades)'
+        printf '  RSS:        %d MB\n' "$((vmrss / 1024))"
+        printf '  VmSize:     %d MB\n' "$((vmsize / 1024))"
+        printf '  Swap:       %d MB%s\n' "$((swap / 1024))" "$swap_note"
+        if [[ "$vmrss" =~ ^[0-9]+$ && "$vmrss" -gt 614400 ]]; then
+            recommendations+=("High RSS (>600 MB). See #156 for known causes and active sub-issues.")
+        fi
+        printf '  Threads:    %s\n' "$threads"
+    fi
+    local fd_count maps_count
+    fd_count="$(ls "/proc/$pid/fd" 2>/dev/null | wc -l | tr -d ' ')"
+    maps_count="$(wc -l < "/proc/$pid/maps" 2>/dev/null || true)"
+    maps_count="${maps_count:-0}"
+    printf '  FDs open:   %s\n' "$fd_count"
+    printf '  Maps:       %s\n' "$maps_count"
+
+    local cpu_pct etime
+    cpu_pct="$(ps -p "$pid" -o %cpu= 2>/dev/null | tr -d ' ')"
+    etime="$(ps -p "$pid" -o etime= 2>/dev/null | tr -d ' ')"
+    printf '  CPU avg:    %s%% over %s\n' "${cpu_pct:-?}" "${etime:-?}"
+    printf '\n'
+
+    printf '=== Top memory segments ===\n'
+    if [[ -r "/proc/$pid/smaps" ]]; then
+        awk '
+            /^[0-9a-f]+-[0-9a-f]+/ { name="[anon]"; if (NF >= 6) name=$6 }
+            /^Rss:/ {
+                rss=$2
+                if (rss >= 5000) printf "  %6d MB  %s\n", rss/1024, name
+            }
+        ' "/proc/$pid/smaps" 2>/dev/null | sort -rn | head -8
+    fi
+    printf '\n'
+
+    printf '=== JS heap footprint ===\n'
+    if [[ -r "/proc/$pid/smaps" ]]; then
+        local jsgc_maps jsgc_deleted jsgc_rss_kb
+        read -r jsgc_maps jsgc_deleted jsgc_rss_kb < <(awk '
+            /^[0-9a-f]+-[0-9a-f]+/ { is_jsgc=($0 ~ /JSGCHeap/); is_deleted=($0 ~ /\(deleted\)/) }
+            is_jsgc && /^Rss:/ { maps++; if (is_deleted) deleted++; rss+=$2 }
+            END { printf "%d %d %d\n", maps+0, deleted+0, rss+0 }
+        ' "/proc/$pid/smaps" 2>/dev/null)
+        printf '  JSGCHeap RSS:       %d MB\n' "$((jsgc_rss_kb / 1024))"
+        printf '  JSGCHeap mappings:  %s total, %s deleted\n' "$jsgc_maps" "$jsgc_deleted"
+        if [[ "$jsgc_deleted" -ge 50 ]]; then
+            recommendations+=("Many deleted JSGCHeap mappings ($jsgc_deleted). This points at QML Loader/context churn; see #163/#164.")
+        fi
+    else
+        printf '  (smaps is not readable)\n'
+    fi
+    printf '\n'
+
+    printf '=== Font cache footprint ===\n'
+    if [[ -r "/proc/$pid/smaps" ]]; then
+        local font_total font_unique
+        font_total="$(awk '
+            /^[0-9a-f]+-/ { name=""; if (NF>=6) name=$6 }
+            /^Rss:/ { if (name ~ /\.(ttf|otf)$/) total+=$2 }
+            END { print int(total/1024) }
+        ' "/proc/$pid/smaps" 2>/dev/null)"
+        font_unique="$(awk '
+            /^[0-9a-f]+-/ { name=""; if (NF>=6) name=$6 }
+            /^Rss:/ { if (name ~ /\.(ttf|otf)$/) seen[name]++ }
+            END { for (k in seen) printf "%4d× %s\n", seen[k], k }
+        ' "/proc/$pid/smaps" 2>/dev/null | sort -rn | head -5)"
+        printf '  Total fonts RSS:  %s MB\n' "${font_total:-0}"
+        printf '  Top fonts (mappings × file):\n'
+        if [[ -n "$font_unique" ]]; then
+            printf '%s\n' "$font_unique" | sed 's/^/    /'
+        else
+            printf '    (none)\n'
+        fi
+        local material_maps
+        material_maps="$(awk '/MaterialSymbolsRounded\.(ttf|otf)( \(deleted\))?$/{c++} END{print c+0}' "/proc/$pid/maps" 2>/dev/null)"
+        if [[ "$material_maps" -ge 10 ]]; then
+            recommendations+=("MaterialSymbolsRounded mapped $material_maps times — variable font cache thrash. See #158.")
+        fi
+    fi
+    printf '\n'
+
+    printf '=== Sensor selection ===\n'
+    local cfg_path monitor_gpu sensor_lines gpu_usage_source hybrid_runtime runtime_path runtime_status
+    cfg_path="$(inir_config_file)"
+    monitor_gpu="(unknown)"
+    if [[ -f "$cfg_path" ]] && command -v jq >/dev/null 2>&1; then
+        monitor_gpu="$(jq -r '.resources.monitorGpu // true' "$cfg_path" 2>/dev/null || echo '(unknown)')"
+    fi
+    sensor_lines="$(_inir_perf_detect_temp_paths)"
+    if [[ -n "$sensor_lines" ]]; then
+        while IFS=: read -r sensor_type sensor_path sensor_label sensor_temp; do
+            case "$sensor_type" in
+                cpu) printf '  CPU temp:       %s = %s°C (%s)\n' "$sensor_path" "$sensor_temp" "$sensor_label" ;;
+                gpu) printf '  GPU temp:       %s = %s°C (%s)\n' "$sensor_path" "$sensor_temp" "$sensor_label" ;;
+            esac
+        done <<< "$sensor_lines"
+    else
+        printf '  CPU/GPU temp:   no hwmon or thermal_zone sensor selected\n'
+    fi
+    gpu_usage_source="$(_inir_perf_detect_gpu_usage_source)"
+    case "$gpu_usage_source" in
+        sysfs:*) printf '  GPU usage:      sysfs %s\n' "${gpu_usage_source#sysfs:}" ;;
+        nvidia-smi:*) printf '  GPU usage:      nvidia-smi %s\n' "${gpu_usage_source#nvidia-smi:}" ;;
+        *) printf '  GPU usage:      none\n' ;;
+    esac
+    hybrid_runtime="$(_inir_perf_detect_hybrid_runtime)"
+    if [[ "$hybrid_runtime" == dgpu:* ]]; then
+        runtime_path="${hybrid_runtime#dgpu:}"
+        runtime_status="$(cat "$runtime_path" 2>/dev/null || true)"
+        printf '  Hybrid dGPU:    %s = %s\n' "$runtime_path" "${runtime_status:-unknown}"
+        if [[ "$monitor_gpu" == "true" && "$runtime_status" == "active" ]]; then
+            recommendations+=("GPU monitoring is enabled while the dGPU is active. Try disabling Resource Monitor GPU polling to test idle temperature.")
+        fi
+    else
+        printf '  Hybrid dGPU:    none detected\n'
+    fi
+    printf '  GPU monitoring: %s\n' "$monitor_gpu"
+    printf '\n'
+
+    printf '=== Child processes ===\n'
+    { pgrep -P "$pid" -a 2>/dev/null || true; } | awk '{
+        cmd=""
+        for (i=2; i<=NF; i++) cmd = cmd (i>2 ? " " : "") $i
+        printf "  PID %s  %s\n", $1, cmd
+    }'
+    local cava_count
+    cava_count="$({ pgrep -P "$pid" cava 2>/dev/null || true; } | wc -l | tr -d ' ')"
+    if [[ "$cava_count" -ge 2 ]]; then
+        recommendations+=("Cava duplication ($cava_count processes for one audio stream). See #160.")
+    fi
+    printf '\n'
+
+    printf '=== inir.service cgroup ===\n'
+    local unit_info unit_cgroup unit_main_pid unit_memory cgroup_rows=""
+    local saw_awww=false saw_wlcopy=false saw_possible_app=false
+    unit_info="$(systemctl --user show -p MainPID -p ControlGroup -p MemoryCurrent inir.service 2>/dev/null || true)"
+    unit_main_pid="$(printf '%s\n' "$unit_info" | awk -F= '$1=="MainPID"{print $2}')"
+    unit_cgroup="$(printf '%s\n' "$unit_info" | awk -F= '$1=="ControlGroup"{print $2}')"
+    unit_memory="$(printf '%s\n' "$unit_info" | awk -F= '$1=="MemoryCurrent"{print $2}')"
+    [[ -n "$unit_memory" && "$unit_memory" =~ ^[0-9]+$ ]] && printf '  MemoryCurrent: %d MB\n' "$((unit_memory / 1024 / 1024))"
+    [[ -n "$unit_cgroup" ]] && printf '  ControlGroup:  %s\n' "$unit_cgroup"
+    [[ -n "$unit_main_pid" && "$unit_main_pid" != "0" ]] && printf '  MainPID:       %s\n' "$unit_main_pid"
+
+    local proc_dir proc_pid proc_cgroup proc_comm proc_cmd proc_rss proc_ppid proc_note proc_rss_mb
+    for proc_dir in /proc/[0-9]*; do
+        proc_pid="${proc_dir##*/}"
+        proc_cgroup="$(cat "$proc_dir/cgroup" 2>/dev/null || true)"
+        if [[ -n "$unit_cgroup" ]]; then
+            [[ "$proc_cgroup" == *"$unit_cgroup"* ]] || continue
+        else
+            [[ "$proc_cgroup" == */inir.service* ]] || continue
+        fi
+        proc_comm="$(cat "$proc_dir/comm" 2>/dev/null || true)"
+        proc_cmd="$(tr '\0' ' ' < "$proc_dir/cmdline" 2>/dev/null || true)"
+        proc_cmd="${proc_cmd% }"
+        proc_cmd="${proc_cmd//$'\t'/ }"
+        [[ -n "$proc_cmd" ]] || proc_cmd="[$proc_comm]"
+        proc_rss="$(awk '/^VmRSS:/{print $2}' "$proc_dir/status" 2>/dev/null || true)"
+        proc_ppid="$(awk '/^PPid:/{print $2}' "$proc_dir/status" 2>/dev/null || true)"
+        proc_rss="${proc_rss:-0}"
+        proc_ppid="${proc_ppid:-?}"
+        proc_rss_mb="$((proc_rss / 1024))"
+        proc_note=""
+        if [[ "$proc_comm" == "qs" ]]; then
+            proc_note="shell"
+        elif [[ "$proc_comm" == "awww-daemon" ]]; then
+            proc_note="wallpaper daemon counted under iNiR"
+            saw_awww=true
+        elif [[ "$proc_comm" == "wl-copy" ]]; then
+            proc_note="clipboard helper counted under iNiR"
+            saw_wlcopy=true
+        elif [[ "$proc_comm" == "cava" ]]; then
+            proc_note="audio visualizer helper"
+        elif [[ "$proc_comm" == "nmcli" ]]; then
+            proc_note="NetworkManager monitor"
+        elif [[ "$proc_cmd" == *"keyboard_lock_state_daemon.py"* ]]; then
+            proc_note="keyboard lock daemon"
+        elif [[ "$proc_comm" == "bash" ]]; then
+            proc_note="shell helper"
+        else
+            proc_note="possible launched app/helper inside iNiR cgroup"
+            saw_possible_app=true
+        fi
+        if ((${#proc_cmd} > 120)); then
+            proc_cmd="${proc_cmd:0:117}..."
+        fi
+        cgroup_rows+="${proc_pid}"$'\t'"${proc_ppid}"$'\t'"${proc_rss_mb}"$'\t'"${proc_comm}"$'\t'"${proc_note}"$'\t'"${proc_cmd}"$'\n'
+    done
+
+    if [[ -n "$cgroup_rows" ]]; then
+        printf '  %-7s %-7s %-7s %-18s %-42s %s\n' PID PPID RSS_MB COMM NOTE COMMAND
+        printf '%s' "$cgroup_rows" | sort -n | while IFS=$'\t' read -r row_pid row_ppid row_rss row_comm row_note row_cmd; do
+            [[ -n "$row_pid" ]] || continue
+            printf '  %-7s %-7s %-7s %-18s %-42s %s\n' "$row_pid" "$row_ppid" "$row_rss" "$row_comm" "$row_note" "$row_cmd"
+        done
+    else
+        printf '  (no processes found under inir.service)\n'
+    fi
+    $saw_awww && recommendations+=("awww-daemon is inside inir.service, so cgroup tools count wallpaper daemon memory/CPU as iNiR.")
+    $saw_wlcopy && recommendations+=("wl-copy is inside inir.service; clipboard helpers may appear as iNiR resource usage.")
+    $saw_possible_app && recommendations+=("Non-shell processes are inside inir.service. Check #167 before trusting cgroup-level app totals.")
+    printf '\n'
+
+    if [[ -f "$cfg_path" ]] && command -v jq >/dev/null 2>&1; then
+        printf '=== Enabled features ===\n'
+        local style family animations effects_blur compositor_blur
+        style="$(jq -r '.appearance.globalStyle // "material"' "$cfg_path" 2>/dev/null)"
+        family="$(jq -r '.appearance.panelFamily // "ii"' "$cfg_path" 2>/dev/null)"
+        animations="$(jq -r '.appearance.animationsEnabled // true' "$cfg_path" 2>/dev/null)"
+        effects_blur="$(jq -r '.background.effects.enableBlur // false' "$cfg_path" 2>/dev/null)"
+        compositor_blur="$(jq -r '.performance.compositorBlur // true' "$cfg_path" 2>/dev/null)"
+        printf '  Config file:     %s\n' "$cfg_path"
+        printf '  Style:           %s\n' "$style"
+        printf '  Panel family:    %s\n' "$family"
+        printf '  Animations:      %s\n' "$animations"
+        printf '  Background blur: %s\n' "$effects_blur"
+        printf '  Compositor blur: %s\n' "$compositor_blur"
+        local enabled_widgets
+        enabled_widgets="$(jq -r '
+            .background.widgets // {} | to_entries[]
+            | select((.value | type) == "object" and .value.enable == true)
+            | .key
+        ' "$cfg_path" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')" || enabled_widgets=""
+        printf '  Widgets enabled: %s\n' "${enabled_widgets:-(none)}"
+        printf '\n'
+
+        if [[ "$effects_blur" == "true" && "$compositor_blur" == "false" ]]; then
+            recommendations+=("Background blur on without compositor blur — using QML blur (more expensive). Toggle compositor blur in settings for cheaper rendering.")
+        fi
+    fi
+
+    if [[ ${#recommendations[@]} -gt 0 ]]; then
+        printf '=== Recommendations ===\n'
+        local r
+        for r in "${recommendations[@]}"; do
+            printf '  - %s\n' "$r"
+        done
+        printf '\n'
+    else
+        printf '=== Recommendations ===\n  (no issues flagged by heuristics)\n\n'
+    fi
+
+    printf 'Tracker: https://github.com/snowarch/iNiR/issues/156\n'
+}
+
 check_qs_abi() {
     # Quickshell uses Qt private APIs — any Qt minor version bump (e.g. 6.10→6.11)
     # breaks ABI and crashes the shell on any UI interaction.
@@ -1360,12 +1857,10 @@ cleanup_orphans() {
 
     # Phase 4: Kill orphaned quickshell/qs processes not owned by the live service.
     # Only target qs processes, never user apps.
-    local alive_pids
+    local alive_pids service_main_pid=""
+    service_main_pid="$(systemctl --user show -p MainPID inir.service 2>/dev/null | cut -d= -f2 || true)"
     alive_pids="$(pgrep -x 'quickshell|qs' 2>/dev/null || true)"
     if [[ -n "$alive_pids" ]]; then
-        local service_main_pid=""
-        service_main_pid="$(systemctl --user show -p MainPID inir.service 2>/dev/null | cut -d= -f2 || true)"
-
         while IFS= read -r pid; do
             [[ -n "$pid" ]] || continue
             # Skip the live service PID and its direct children
@@ -1378,6 +1873,24 @@ cleanup_orphans() {
             kill "$pid" 2>/dev/null || true
         done <<< "$alive_pids"
     fi
+
+    # Phase 5: Kill orphaned inir helper daemons still in inir.service cgroup.
+    # KillMode=process only kills the main QS pid; keyboard daemon, nmcli monitor,
+    # and awww-daemon (when not in their own transient scope) get reparented to the
+    # user manager but stay in the cgroup, accumulating across restarts.
+    local _pid _cgroup
+    while IFS= read -r _pid; do
+        [[ -n "$_pid" ]] || continue
+        # Skip processes owned by the live service main pid or its children
+        if [[ -n "$service_main_pid" && "$service_main_pid" != "0" ]]; then
+            local _ppid
+            _ppid="$(ps -o ppid= -p "$_pid" 2>/dev/null | tr -d ' ' || true)"
+            [[ "$_ppid" == "$service_main_pid" ]] && continue
+        fi
+        _cgroup="$(cat /proc/$_pid/cgroup 2>/dev/null || true)"
+        [[ "$_cgroup" == *"inir.service"* ]] || continue
+        kill "$_pid" 2>/dev/null || true
+    done < <(pgrep -f 'keyboard_lock_state_daemon\.py|nmcli monitor' 2>/dev/null || true)
 }
 
 kill_shell() {
@@ -2873,12 +3386,19 @@ case "$command_name" in
     doctor)
         # Quick path: `inir doctor --fix-abi` rebuilds quickshell directly without
         # running the full 22-step pipeline. Useful for pacman hooks and scripts.
+        # `inir doctor --perf` dumps a runtime perf snapshot for triage — see
+        # _inir_doctor_perf above. Neither flag delegates to the setup pipeline.
         fix_abi_only=false
+        perf_only=false
         fix_abi_mode=interactive
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --fix-abi)
                     fix_abi_only=true
+                    shift
+                    ;;
+                --perf)
+                    perf_only=true
                     shift
                     ;;
                 -n|--noninteractive|--non-interactive|-y|--yes)
@@ -2894,6 +3414,11 @@ case "$command_name" in
                     ;;
             esac
         done
+        if $perf_only; then
+            require_qs
+            _inir_doctor_perf
+            exit $?
+        fi
         if $fix_abi_only; then
             require_qs
             _inir_run_quickshell_rebuild "$fix_abi_mode"
