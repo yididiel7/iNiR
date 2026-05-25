@@ -22,7 +22,10 @@ Item {
         animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
     }
 
-    rotation: (360 / 60 * clockSecond) + 180 - (angleStep / Math.PI * 180 * dateText.length) / 2
+    rotation: {
+        if (!Config.options.time.secondPrecision) return 0
+        else return (360 / 60 * clockSecond) + 180 - (angleStep / Math.PI * 180 * dateText.length) / 2
+    }
 
     Repeater {
         model: root.dateText.length 
