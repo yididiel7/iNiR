@@ -880,11 +880,16 @@ Scope {
                                         text: root.overlaySearchText
                                         onTextChanged: {
                                             root.overlaySearchText = text;
-                                            if (text.length > 0 && !overlayPagesStack.preloadRequested) {
-                                                overlayPagesStack.preloadRequested = true
-                                                overlayPreloadTimer.start()
+                                            if (text.length > 0) {
+                                                if (!overlayPagesStack.preloadRequested) {
+                                                    overlayPagesStack.preloadRequested = true
+                                                    overlayPreloadTimer.start()
+                                                }
+                                                searchDebounceTimer.restart();
+                                            } else {
+                                                // Clear immediately for clean exit morph (no debounce)
+                                                root.overlaySearchResults = [];
                                             }
-                                            searchDebounceTimer.restart();
                                         }
 
                                         Keys.onPressed: (event) => {
@@ -1046,114 +1051,155 @@ Scope {
                                 ColumnLayout {
                                     id: navCol
                                     width: parent.width
-                                    spacing: 2
+                                    spacing: 0
 
                                     Repeater {
-                                        model: root.visibleNavPages
-                                        delegate: RippleButton {
-                                            id: navBtn
+                                        model: root.visibleNavItems
+                                        delegate: Column {
+                                            id: navItem
                                             required property int index
                                             required property var modelData
-
-                                            // realIndex maps back to overlayPages index regardless of easy-mode filtering
-                                            readonly property int pageRealIndex: modelData.realIndex !== undefined ? modelData.realIndex : index
-
                                             Layout.fillWidth: true
-                                            implicitHeight: 38
-                                            buttonRadius: Appearance.rounding.small
+                                            spacing: 0
 
-                                            toggled: overlayCurrentPage === pageRealIndex
-                                            colBackground: "transparent"
-                                            colBackgroundToggled: Appearance.angelEverywhere
-                                                ? Appearance.angel.colGlassCard
-                                                : Appearance.inirEverywhere
-                                                    ? Appearance.inir.colLayer2
-                                                    : Appearance.auroraEverywhere
-                                                        ? Appearance.aurora.colElevatedSurface
-                                                        : Appearance.colors.colLayer1
-                                            colBackgroundToggledHover: Appearance.angelEverywhere
-                                                ? Appearance.angel.colGlassCardHover
-                                                : Appearance.inirEverywhere
-                                                    ? Appearance.inir.colLayer1Hover
-                                                    : Appearance.auroraEverywhere
-                                                        ? Appearance.aurora.colElevatedSurface
-                                                        : Appearance.colors.colLayer1Hover
-                                            colBackgroundHover: Appearance.angelEverywhere
-                                                ? Appearance.angel.colGlassCard
-                                                : Appearance.inirEverywhere
-                                                    ? Appearance.inir.colLayer1Hover
-                                                    : Appearance.auroraEverywhere
-                                                        ? Appearance.aurora.colSubSurface
-                                                        : CF.ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.5)
+                                            // ── Category header ──
+                                            Item {
+                                                width: parent.width
+                                                height: visible ? (navItem.index > 0 ? 28 : 20) : 0
+                                                visible: navItem.modelData.type === "header"
 
-                                            onClicked: overlayCurrentPage = pageRealIndex
-
-                                            contentItem: Item {
-                                                anchors.fill: parent
-
-                                                // Active indicator pill (left edge)
                                                 Rectangle {
-                                                    id: indicatorPill
-                                                    width: 3
-                                                    height: navBtn.toggled ? 18 : 0
-                                                    radius: 2
-                                                    anchors.left: parent.left
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    color: Appearance.angelEverywhere
-                                                        ? Appearance.angel.colPrimary
-                                                        : Appearance.inirEverywhere
-                                                            ? Appearance.inir.colAccent
-                                                            : Appearance.colors.colPrimary
-                                                    opacity: navBtn.toggled ? 1 : 0
-
-                                                    Behavior on height {
-                                                        enabled: Appearance.animationsEnabled
-                                                        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
-                                                    }
-                                                    Behavior on opacity {
-                                                        enabled: Appearance.animationsEnabled
-                                                        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
-                                                    }
+                                                    width: parent.width - 16
+                                                    height: 1
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 6
+                                                    color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                                                         : Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
+                                                         : Appearance.m3colors.m3outlineVariant
+                                                    opacity: 0.4
+                                                    visible: navItem.index > 0
                                                 }
 
-                                                RowLayout {
+                                                StyledText {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 12
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.bottomMargin: 2
+                                                    text: navItem.modelData.label || ""
+                                                    font {
+                                                        family: Appearance.font.family.main
+                                                        pixelSize: Appearance.font.pixelSize.smaller
+                                                        weight: Font.DemiBold
+                                                    }
+                                                    color: Appearance.colors.colSubtext
+                                                    opacity: 0.7
+                                                }
+                                            }
+
+                                            // ── Nav button ──
+                                            RippleButton {
+                                                id: navBtn
+                                                visible: navItem.modelData.type === "page"
+                                                width: parent.width
+                                                implicitHeight: visible ? 38 : 0
+
+                                                readonly property int pageRealIndex: navItem.modelData.realIndex !== undefined ? navItem.modelData.realIndex : navItem.index
+
+                                                buttonRadius: Appearance.rounding.small
+                                                toggled: overlayCurrentPage === pageRealIndex
+                                                colBackground: "transparent"
+                                                colBackgroundToggled: Appearance.angelEverywhere
+                                                    ? Appearance.angel.colGlassCard
+                                                    : Appearance.inirEverywhere
+                                                        ? Appearance.inir.colLayer2
+                                                        : Appearance.auroraEverywhere
+                                                            ? Appearance.aurora.colElevatedSurface
+                                                            : Appearance.colors.colLayer1
+                                                colBackgroundToggledHover: Appearance.angelEverywhere
+                                                    ? Appearance.angel.colGlassCardHover
+                                                    : Appearance.inirEverywhere
+                                                        ? Appearance.inir.colLayer1Hover
+                                                        : Appearance.auroraEverywhere
+                                                            ? Appearance.aurora.colElevatedSurface
+                                                            : Appearance.colors.colLayer1Hover
+                                                colBackgroundHover: Appearance.angelEverywhere
+                                                    ? Appearance.angel.colGlassCard
+                                                    : Appearance.inirEverywhere
+                                                        ? Appearance.inir.colLayer1Hover
+                                                        : Appearance.auroraEverywhere
+                                                            ? Appearance.aurora.colSubSurface
+                                                            : CF.ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.5)
+
+                                                onClicked: overlayCurrentPage = pageRealIndex
+
+                                                contentItem: Item {
                                                     anchors.fill: parent
-                                                    anchors.leftMargin: 10
-                                                    anchors.rightMargin: 8
-                                                    spacing: 10
 
-                                                    MaterialSymbol {
-                                                        text: modelData.icon
-                                                        iconSize: 18
-                                                        color: navBtn.toggled
-                                                            ? (Appearance.inirEverywhere
+                                                    // Active indicator pill (left edge)
+                                                    Rectangle {
+                                                        id: indicatorPill
+                                                        width: 3
+                                                        height: navBtn.toggled ? 18 : 0
+                                                        radius: 2
+                                                        anchors.left: parent.left
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        color: Appearance.angelEverywhere
+                                                            ? Appearance.angel.colPrimary
+                                                            : Appearance.inirEverywhere
                                                                 ? Appearance.inir.colAccent
-                                                                : Appearance.colors.colPrimary)
-                                                            : Appearance.colors.colOnSurfaceVariant
-                                                        rotation: modelData.iconRotation || 0
+                                                                : Appearance.colors.colPrimary
+                                                        opacity: navBtn.toggled ? 1 : 0
 
-                                                        Behavior on color {
+                                                        Behavior on height {
                                                             enabled: Appearance.animationsEnabled
-                                                            animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                                        }
+                                                        Behavior on opacity {
+                                                            enabled: Appearance.animationsEnabled
+                                                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                                                         }
                                                     }
 
-                                                    StyledText {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.name
-                                                        font {
-                                                            family: Appearance.font.family.main
-                                                            pixelSize: Appearance.font.pixelSize.small
-                                                            weight: navBtn.toggled ? Font.Medium : Font.Normal
-                                                        }
-                                                        color: navBtn.toggled
-                                                            ? Appearance.colors.colOnLayer1
-                                                            : Appearance.colors.colOnSurfaceVariant
-                                                        elide: Text.ElideRight
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 10
+                                                        anchors.rightMargin: 8
+                                                        spacing: 10
 
-                                                        Behavior on color {
-                                                            enabled: Appearance.animationsEnabled
-                                                            animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                                        MaterialSymbol {
+                                                            text: navItem.modelData.icon || ""
+                                                            iconSize: 18
+                                                            color: navBtn.toggled
+                                                                ? (Appearance.inirEverywhere
+                                                                    ? Appearance.inir.colAccent
+                                                                    : Appearance.colors.colPrimary)
+                                                                : Appearance.colors.colOnSurfaceVariant
+                                                            rotation: navItem.modelData.iconRotation || 0
+
+                                                            Behavior on color {
+                                                                enabled: Appearance.animationsEnabled
+                                                                animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                                            }
+                                                        }
+
+                                                        StyledText {
+                                                            Layout.fillWidth: true
+                                                            text: navItem.modelData.name || ""
+                                                            font {
+                                                                family: Appearance.font.family.main
+                                                                pixelSize: Appearance.font.pixelSize.small
+                                                                weight: navBtn.toggled ? Font.Medium : Font.Normal
+                                                            }
+                                                            color: navBtn.toggled
+                                                                ? Appearance.colors.colOnLayer1
+                                                                : Appearance.colors.colOnSurfaceVariant
+                                                            elide: Text.ElideRight
+
+                                                            Behavior on color {
+                                                                enabled: Appearance.animationsEnabled
+                                                                animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1342,18 +1388,30 @@ Scope {
                                         active: Config.ready && (overlayPagesStack.visitedPages[index] === true)
                                         asynchronous: index !== overlayCurrentPage
                                         source: overlayPages[index].component
-                                        visible: index === overlayCurrentPage && status === Loader.Ready
-                                        opacity: visible ? 1 : 0
-                                        scale: visible ? 1 : 0.985
+
+                                        readonly property bool isCurrentPage: index === overlayCurrentPage && status === Loader.Ready
+                                        visible: isCurrentPage || _pageOpacity > 0
+                                        property real _pageOpacity: isCurrentPage ? 1 : 0
+                                        property real _pageScale: isCurrentPage ? 1 : 0.985
+                                        // Direction-aware horizontal slide
+                                        property real _slideX: isCurrentPage ? 0 : (index < overlayCurrentPage ? -30 : 30)
+
+                                        opacity: _pageOpacity
+                                        scale: _pageScale
+                                        transform: Translate { x: overlayPageLoader._slideX }
                                         transformOrigin: Item.Center
 
-                                        Behavior on opacity {
+                                        Behavior on _pageOpacity {
                                             enabled: Appearance.animationsEnabled
                                             animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                                         }
-                                        Behavior on scale {
+                                        Behavior on _pageScale {
                                             enabled: Appearance.animationsEnabled
                                             animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
+                                        }
+                                        Behavior on _slideX {
+                                            enabled: Appearance.animationsEnabled
+                                            animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
                                         }
                                     }
                                 }
@@ -1367,7 +1425,7 @@ Scope {
                 Rectangle {
                     id: overlaySearchResultsOverlay
                     anchors.fill: parent
-                    visible: root.overlaySearchText.length > 0
+                    visible: root.overlaySearchText.length > 0 || overlaySearchResultsCard._cardOpacity > 0
                     color: "transparent"
                     z: 100
 
@@ -1382,7 +1440,22 @@ Scope {
                     }
                     Rectangle {
                         id: overlaySearchResultsCard
-                        visible: root.overlaySearchResults.length > 0
+                        property real _cardOpacity: root.overlaySearchResults.length > 0 ? 1 : 0
+                        property real _cardScale: root.overlaySearchResults.length > 0 ? 1 : 0.92
+                        visible: _cardOpacity > 0 || root.overlaySearchResults.length > 0
+                        opacity: _cardOpacity
+                        scale: _cardScale
+                        transformOrigin: Item.Top
+
+                        Behavior on _cardOpacity {
+                            enabled: Appearance.animationsEnabled
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
+                        }
+                        Behavior on _cardScale {
+                            enabled: Appearance.animationsEnabled
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
+                        }
+
                         width: Math.min(parent.width - 40, 480)
                         height: Math.min(overlayResultsList.contentHeight + 16, 380)
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -1572,7 +1645,24 @@ Scope {
 
                     // No results indicator
                     Rectangle {
-                        visible: root.overlaySearchText.length > 0 && root.overlaySearchResults.length === 0
+                        id: noResultsPill
+                        readonly property bool _shouldShow: root.overlaySearchText.length > 0 && root.overlaySearchResults.length === 0
+                        property real _pillOpacity: _shouldShow ? 1 : 0
+                        property real _pillScale: _shouldShow ? 1 : 0.85
+                        visible: _pillOpacity > 0 || _shouldShow
+                        opacity: _pillOpacity
+                        scale: _pillScale
+                        transformOrigin: Item.Top
+
+                        Behavior on _pillOpacity {
+                            enabled: Appearance.animationsEnabled
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
+                        Behavior on _pillScale {
+                            enabled: Appearance.animationsEnabled
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
+                        }
+
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         anchors.topMargin: 56
@@ -1618,10 +1708,10 @@ Scope {
                             overlaySearchField.forceActiveFocus();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_PageDown || event.key === Qt.Key_Tab) {
-                            overlayCurrentPage = (overlayCurrentPage + 1) % overlayPages.length
+                            overlayCurrentPage = root.nextNavPage(overlayCurrentPage)
                             event.accepted = true
                         } else if (event.key === Qt.Key_PageUp || event.key === Qt.Key_Backtab) {
-                            overlayCurrentPage = (overlayCurrentPage - 1 + overlayPages.length) % overlayPages.length
+                            overlayCurrentPage = root.prevNavPage(overlayCurrentPage)
                             event.accepted = true
                         }
                     }
@@ -1642,6 +1732,13 @@ Scope {
 
     // ── Page definitions (same as settings.qml) ──
     property int overlayCurrentPage: 0
+    property int _prevPage: 0
+    property int _slideDir: 1
+
+    onOverlayCurrentPageChanged: {
+        _slideDir = (overlayCurrentPage > _prevPage) ? 1 : -1;
+        _prevPage = overlayCurrentPage;
+    }
 
     // Navigation categories for grouping pages in the rail
     property var navCategories: [
@@ -1783,18 +1880,45 @@ Scope {
         }
     ]
 
-    // Easy mode helpers — derived list filtered to essentials when on
+    // Easy mode helpers
     readonly property bool easyMode: Config.options?.settingsUi?.easyMode ?? false
-    readonly property var visibleNavPages: {
-        var list = [];
-        for (var i = 0; i < overlayPages.length; i++) {
-            if (!easyMode || overlayPages[i].essential === true) {
-                var entry = Object.assign({}, overlayPages[i]);
-                entry.realIndex = i;
-                list.push(entry);
+
+    // Nav model: category headers + page entries, filtered by easy mode
+    readonly property var visibleNavItems: {
+        var items = [];
+        for (var c = 0; c < navCategories.length; c++) {
+            var cat = navCategories[c];
+            var catPages = [];
+            for (var p = 0; p < cat.pages.length; p++) {
+                var pageIdx = cat.pages[p];
+                if (pageIdx >= overlayPages.length) continue;
+                if (easyMode && overlayPages[pageIdx].essential !== true) continue;
+                catPages.push(pageIdx);
+            }
+            if (catPages.length === 0) continue;
+            items.push({ type: "header", label: cat.label });
+            for (var j = 0; j < catPages.length; j++) {
+                var entry = Object.assign({}, overlayPages[catPages[j]]);
+                entry.type = "page";
+                entry.realIndex = catPages[j];
+                items.push(entry);
             }
         }
-        return list;
+        return items;
+    }
+
+    // Ordered page indices matching nav rail order (for keyboard nav)
+    readonly property var navPageOrder: visibleNavItems.filter(i => i.type === "page").map(i => i.realIndex)
+
+    function nextNavPage(current) {
+        var idx = navPageOrder.indexOf(current);
+        if (idx < 0) return navPageOrder.length > 0 ? navPageOrder[0] : 0;
+        return navPageOrder[(idx + 1) % navPageOrder.length];
+    }
+    function prevNavPage(current) {
+        var idx = navPageOrder.indexOf(current);
+        if (idx < 0) return navPageOrder.length > 0 ? navPageOrder[navPageOrder.length - 1] : 0;
+        return navPageOrder[(idx - 1 + navPageOrder.length) % navPageOrder.length];
     }
 
     function setEasyMode(enabled) {
