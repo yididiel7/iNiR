@@ -1214,6 +1214,16 @@ apply_shell_scale() {
     # bugs where the compositor surface is larger than the Qt-rendered content area,
     # which causes wallpaper/blur layers to appear smaller than the screen.
     export QT_SCALE_FACTOR=1
+
+    # Unset DPI-forcing variables that cause blurry rendering when inherited from
+    # the user's shell environment. These override the compositor's native DPI
+    # and create a mismatch between the Qt logical size and the Wayland buffer
+    # physical size — resulting in blurry surfaces (dock, bar, tray, etc).
+    # The compositor (Niri/Hyprland) already handles HiDPI correctly; Qt should
+    # use its native DPI detection via the Wayland protocol, not forced values.
+    unset QT_WAYLAND_FORCE_DPI 2>/dev/null || true
+    unset QT_FONT_DPI 2>/dev/null || true
+    unset QT_AUTO_SCREEN_SCALE_FACTOR 2>/dev/null || true
 }
 
 wait_for_wayland_socket() {
