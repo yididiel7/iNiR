@@ -171,7 +171,8 @@ Item {
             sourceSize.height: root.screenHeight
             asynchronous: true
 
-            layer.enabled: Appearance.effectsEnabled && sidebarLeftBackground.useWallpaperBackdrop
+            // OPTIMIZATION: Release FBO when sidebar is hidden (saves ~16 MiB VRAM)
+            layer.enabled: Appearance.effectsEnabled && sidebarLeftBackground.useWallpaperBackdrop && root.panelVisible
             layer.effect: MultiEffect {
                 source: sidebarLeftBlurredWallpaper
                 anchors.fill: source

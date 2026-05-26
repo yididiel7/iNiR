@@ -195,7 +195,7 @@ Item {
                 anchors.fill: source
                 saturation: root.angelStyle ? Appearance.angel.blurSaturation : 0.14
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled ? 1.12 : 0
             }
 
@@ -298,7 +298,7 @@ Item {
                     layer.effect: MultiEffect {
                         saturation: root.angelStyle ? Appearance.angel.blurSaturation : 0.2
                         blurEnabled: Appearance.effectsEnabled
-                        blurMax: 100
+                        blurMax: 64
                         blur: 1
                     }
 

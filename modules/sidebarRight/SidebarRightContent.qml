@@ -203,7 +203,8 @@ Item {
             sourceSize.height: root.screenHeight ?? 1080
             asynchronous: true
 
-            layer.enabled: Appearance.effectsEnabled && sidebarRightBackground.useWallpaperBackdrop
+            // OPTIMIZATION: Release FBO when sidebar is hidden (saves ~16 MiB VRAM)
+            layer.enabled: Appearance.effectsEnabled && sidebarRightBackground.useWallpaperBackdrop && root.panelVisible
             layer.effect: MultiEffect {
                 source: sidebarRightBlurredWallpaper
                 anchors.fill: source
@@ -211,7 +212,7 @@ Item {
                     ? (Appearance.angel.blurSaturation * Appearance.angel.colorStrength)
                     : (Appearance.effectsEnabled ? 0.2 : 0)
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled
                     ? (sidebarRightBackground.angelEverywhere ? Appearance.angel.blurIntensity : 1)
                     : 0
