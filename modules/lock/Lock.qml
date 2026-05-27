@@ -6,7 +6,6 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.lock
 import qs.modules.waffle.lock
-import qs.modules.waffle.looks
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -177,7 +176,8 @@ Scope {
 
         WlSessionLockSurface {
             id: lockSurface
-            color: root._cachedUseWaffleLock ? Looks.colors.bg0 : Appearance.colors.colLayer0
+            // Use colLayer0 as transitional background - actual lock surface has its own bg
+            color: Appearance.colors.colLayer0
             
             // Fallback timer - if lock surface doesn't load properly, use swaylock
             Timer {

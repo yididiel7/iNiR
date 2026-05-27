@@ -1,7 +1,7 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
 import Quickshell
-import qs.modules.waffle.looks
+import qs.modules.common
 import qs.services
 
 /**
@@ -23,7 +23,7 @@ Item {
     
     // Style control
     property bool monochrome: false       // If true, applies 'color' as mask. If false, renders original colors.
-    property color color: Looks.colors.fg // Used only if monochrome=true
+    property color color: Appearance.colors.colOnLayer1 // Used only if monochrome=true
     
     // Fluent icon mode - only try fluent asset paths when true (set by FluentIcon)
     property bool useFluent: false
@@ -82,7 +82,7 @@ Item {
             source: {
                 // Only try fluent path if explicitly requested
                 if (root.useFluent && root.icon && !root.icon.includes("/") && !root.icon.includes(".")) {
-                    return `${Looks.iconsPath}/${root.icon}${root.filled ? "-filled" : ""}.svg`
+                    return `${Directories.assetsPath}/icons/fluent/${root.icon}${root.filled ? "-filled" : ""}.svg`
                 }
                 return root.resolvedSource
             }

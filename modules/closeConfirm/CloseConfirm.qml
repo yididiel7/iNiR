@@ -126,22 +126,21 @@ Scope {
                     id: contentLoader
                     anchors.fill: parent
                     focus: true
-                    sourceComponent: Config.options?.panelFamily === "waffle" ? waffleContent : iiContent
-                    onLoaded: if (item)
-                        item.forceActiveFocus()
-
-                    Component {
-                        id: iiContent
-                        CloseConfirmContent {
-                            targetWindow: root.targetWindow
-                            onConfirm: root.confirmClose()
-                            onCancel: root.cancel()
+                    // Use source URL for waffle to avoid parsing when using ii family
+                    sourceComponent: Config.options?.panelFamily === "waffle" ? undefined : iiContent
+                    source: Config.options?.panelFamily === "waffle" ? "WCloseConfirmContent.qml" : ""
+                    onLoaded: {
+                        if (item) {
+                            item.targetWindow = Qt.binding(() => root.targetWindow)
+                            item.confirm.connect(root.confirmClose)
+                            item.cancel.connect(root.cancel)
+                            item.forceActiveFocus()
                         }
                     }
 
                     Component {
-                        id: waffleContent
-                        WCloseConfirmContent {
+                        id: iiContent
+                        CloseConfirmContent {
                             targetWindow: root.targetWindow
                             onConfirm: root.confirmClose()
                             onCancel: root.cancel()
