@@ -1206,6 +1206,20 @@ Scope {
                                         property real targetH: 0
                                         property bool hasTarget: false
 
+                                        // Leading/trailing edges travel at different speeds, so the
+                                        // pill stretches toward the target and contracts on arrival
+                                        // (same morph as the bar Workspaces indicator).
+                                        property real edgeTop: targetY
+                                        property real edgeBottom: targetY + targetH
+                                        Behavior on edgeTop {
+                                            enabled: Appearance.animationsEnabled
+                                            animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Easing.OutCubic }
+                                        }
+                                        Behavior on edgeBottom {
+                                            enabled: Appearance.animationsEnabled
+                                            animation: NumberAnimation { duration: Appearance.animation.elementMove.duration * 1.35; easing.type: Easing.OutCubic }
+                                        }
+
                                         function updatePosition() {
                                             for (var i = 0; i < navRepeater.count; i++) {
                                                 var item = navRepeater.itemAt(i);
@@ -1222,8 +1236,8 @@ Scope {
                                             hasTarget = false;
                                         }
 
-                                        y: targetY
-                                        height: hasTarget ? targetH : 0
+                                        y: Math.min(edgeTop, edgeBottom)
+                                        height: hasTarget ? Math.abs(edgeBottom - edgeTop) : 0
                                         opacity: hasTarget ? 1 : 0
 
                                         Rectangle {
@@ -1242,14 +1256,6 @@ Scope {
                                             }
                                         }
 
-                                        Behavior on y {
-                                            enabled: Appearance.animationsEnabled
-                                            animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasized }
-                                        }
-                                        Behavior on height {
-                                            enabled: Appearance.animationsEnabled
-                                            animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasized }
-                                        }
                                         Behavior on opacity {
                                             enabled: Appearance.animationsEnabled
                                             animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
