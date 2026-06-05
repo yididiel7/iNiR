@@ -592,6 +592,17 @@ bind "Mod+Alt+K" { spawn "inir" "keyboard" "switchLayout"; }
 
 ---
 
+### zoom
+
+Screen zoom. Accessibility feature, or for reading tiny UI without pretending your monitor is the problem.
+
+| Function | Description |
+|----------|-------------|
+| `zoomIn` | Increase compositor zoom |
+| `zoomOut` | Decrease compositor zoom |
+
+---
+
 ## Waffle-Specific Targets
 
 These targets only work when using the Waffle (Windows 11) panel style.
@@ -737,7 +748,6 @@ Screen recording floating pill OSD. Shows elapsed time and stop button during ac
 
 ---
 
-
 ## Standalone Commands
 
 These are top-level `inir` commands that work directly, without going through IPC.
@@ -751,4 +761,3 @@ bind "Super+Shift+C" { spawn "inir" "colorpicker"; }
 ```
 
 Requires `hyprpicker` installed.
-
